@@ -110,6 +110,12 @@
             transform: translateY(-1px);
         }
 
+        .predict-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .result {
             margin-top: 30px;
             padding: 25px;
@@ -136,6 +142,12 @@
             background: linear-gradient(45deg, #ff6b6b, #feca57);
             color: white;
             border-left: 5px solid #f44336;
+        }
+
+        .result.error {
+            background: linear-gradient(45deg, #ff4757, #ff6b7a);
+            color: white;
+            border-left: 5px solid #ff3742;
         }
 
         .disclaimer {
@@ -257,146 +269,135 @@
     </div>
 
     <script>
-        
-        function analyzeRiskFactors(data) {
-            const factors = [];
+        // Handle form submission
+        document.getElementById('diabetesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
             
-            if (data.glucose >= 126) factors.push("🚨 High glucose level (≥126 mg/dL)");
-            else if (data.glucose >= 100) factors.push("⚠️ Elevated glucose level (100-125 mg/dL)");
+            // Show loading and disable button
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            const submitBtn = document.querySelector('.predict-btn');
             
-            if (data.bmi >= 30) factors.push("🚨 Obesity (BMI ≥30)");
-            else if (data.bmi >= 25) factors.push("⚠️ Overweight (BMI 25-29.9)");
+            loading.style.display = 'block';
+            result.classList.remove('show');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '🔄 Processing...';
             
-            if (data.age >= 45) factors.push("⚠️ Age 45 or older");
-            if (data.pregnancies >= 4) factors.push("⚠️ Multiple pregnancies");
-            if (data.bloodPressure >= 90) factors.push("⚠️ High blood pressure");
-            if (data.diabetesPedigree >= 0.5) factors.push("⚠️ Strong family history");
+            // Collect form data
+            const formData = new FormData(this);
+            const data = {
+                pregnancies: parseInt(formData.get('pregnancies')),
+                glucose: parseInt(formData.get('glucose')),
+                bloodPressure: parseInt(formData.get('bloodPressure')),
+                skinThickness: parseInt(formData.get('skinThickness')),
+                insulin: parseInt(formData.get('insulin')),
+                bmi: parseFloat(formData.get('bmi')),
+                diabetesPedigree: parseFloat(formData.get('diabetesPedigree')),
+                age: parseInt(formData.get('age'))
+            };
             
-            return factors;
-        }
-
-        // Replace the mock prediction function with real API call
-document.getElementById('diabetesForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    // Show loading
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('result').classList.remove('show');
-    
-    // Collect form data
-    const formData = new FormData(this);
-    const data = {
-        pregnancies: parseInt(formData.get('pregnancies')),
-        glucose: parseInt(formData.get('glucose')),
-        bloodPressure: parseInt(formData.get('bloodPressure')),
-        skinThickness: parseInt(formData.get('skinThickness')),
-        insulin: parseInt(formData.get('insulin')),
-        bmi: parseFloat(formData.get('bmi')),
-        diabetesPedigree: parseFloat(formData.get('diabetesPedigree')),
-        age: parseInt(formData.get('age'))
-    };
-    
-    try {
-        // Make API call to your Flask backend
-        const response = await fetch('/predict', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
+            try {
+                // Make API call to Flask backend
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const responseData = await response.json();
+                
+                // Hide loading and restore button
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🔮 Predict Diabetes Risk';
+                
+                if (responseData.success) {
+                    displayResult(responseData);
+                } else {
+                    displayError(responseData.error || 'Unknown error occurred');
+                }
+                
+            } catch (error) {
+                // Hide loading and restore button
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🔮 Predict Diabetes Risk';
+                
+                displayError('Network error. Please check your connection and try again.');
+                console.error('Error:', error);
+            }
         });
-        
-        const result = await response.json();
-        
-        // Hide loading
-        document.getElementById('loading').style.display = 'none';
-        
-        if (result.success) {
-            // Display result using real model predictions
-            displayResult(result);
-        } else {
-            // Handle error
-            displayError(result.error);
+
+        function displayResult(result) {
+            const resultDiv = document.getElementById('result');
+            
+            if (result.prediction === 0) {
+                resultDiv.className = 'result low-risk show';
+                resultDiv.innerHTML = `
+                    <h3>✅ Low Risk Result</h3>
+                    <p><strong>Good news!</strong> Based on your data, the model predicts a <strong>lower risk</strong> of diabetes.</p>
+                    <p>Model Confidence: <strong>${(result.confidence * 100).toFixed(1)}%</strong></p>
+                    <p>Probability of No Diabetes: <strong>${(result.probabilities.no_diabetes * 100).toFixed(1)}%</strong></p>
+                    <p>Probability of Diabetes: <strong>${(result.probabilities.diabetes * 100).toFixed(1)}%</strong></p>
+                    ${result.risk_factors.length > 0 ? `
+                        <div style="margin-top: 15px;">
+                            <strong>Areas to monitor:</strong>
+                            <ul style="text-align: left; margin-top: 10px;">
+                                ${result.risk_factors.map(factor => `<li>${factor}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    <p style="margin-top: 15px; font-size: 0.9em; color: #e8f5e8;">
+                        <em>This is a machine learning prediction. Always consult healthcare professionals for medical advice.</em>
+                    </p>
+                `;
+            } else {
+                resultDiv.className = 'result high-risk show';
+                resultDiv.innerHTML = `
+                    <h3>⚠️ Higher Risk Result</h3>
+                    <p><strong>Important:</strong> The model predicts a <strong>higher risk</strong> of diabetes based on your data.</p>
+                    <p>Model Confidence: <strong>${(result.confidence * 100).toFixed(1)}%</strong></p>
+                    <p>Probability of No Diabetes: <strong>${(result.probabilities.no_diabetes * 100).toFixed(1)}%</strong></p>
+                    <p>Probability of Diabetes: <strong>${(result.probabilities.diabetes * 100).toFixed(1)}%</strong></p>
+                    ${result.risk_factors.length > 0 ? `
+                        <div style="margin-top: 15px;">
+                            <strong>Key risk factors identified:</strong>
+                            <ul style="text-align: left; margin-top: 10px;">
+                                ${result.risk_factors.map(factor => `<li>${factor}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    <p style="margin-top: 15px;"><strong>⚠️ Please consult a healthcare provider for proper evaluation and testing.</strong></p>
+                    <p style="margin-top: 10px; font-size: 0.9em; color: #fff8dc;">
+                        <em>This is a machine learning prediction. Always consult healthcare professionals for medical advice.</em>
+                    </p>
+                `;
+            }
         }
-        
-    } catch (error) {
-        // Hide loading
-        document.getElementById('loading').style.display = 'none';
-        
-        // Handle network or other errors
-        displayError('Network error. Please try again.');
-        console.error('Error:', error);
-    }
-});
 
-function displayResult(result) {
-    const resultDiv = document.getElementById('result');
-    
-    if (result.prediction === 0) {
-        resultDiv.className = 'result low-risk show';
-        resultDiv.innerHTML = `
-            <h3>✅ Low Risk Result</h3>
-            <p><strong>Good news!</strong> Based on your data, the model predicts a <strong>lower risk</strong> of diabetes.</p>
-            <p>Model Confidence: <strong>${(result.confidence * 100).toFixed(1)}%</strong></p>
-            <p>Probability of No Diabetes: <strong>${(result.probabilities.no_diabetes * 100).toFixed(1)}%</strong></p>
-            <p>Probability of Diabetes: <strong>${(result.probabilities.diabetes * 100).toFixed(1)}%</strong></p>
-            ${result.risk_factors.length > 0 ? `
-                <div style="margin-top: 15px;">
-                    <strong>Areas to monitor:</strong>
-                    <ul style="text-align: left; margin-top: 10px;">
-                        ${result.risk_factors.map(factor => `<li>${factor}</li>`).join('')}
-                    </ul>
-                </div>
-            ` : ''}
-            <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-                <em>This is a machine learning prediction. Always consult healthcare professionals for medical advice.</em>
-            </p>
-        `;
-    } else {
-        resultDiv.className = 'result high-risk show';
-        resultDiv.innerHTML = `
-            <h3>⚠️ Higher Risk Result</h3>
-            <p><strong>Important:</strong> The model predicts a <strong>higher risk</strong> of diabetes based on your data.</p>
-            <p>Model Confidence: <strong>${(result.confidence * 100).toFixed(1)}%</strong></p>
-            <p>Probability of No Diabetes: <strong>${(result.probabilities.no_diabetes * 100).toFixed(1)}%</strong></p>
-            <p>Probability of Diabetes: <strong>${(result.probabilities.diabetes * 100).toFixed(1)}%</strong></p>
-            ${result.risk_factors.length > 0 ? `
-                <div style="margin-top: 15px;">
-                    <strong>Key risk factors identified:</strong>
-                    <ul style="text-align: left; margin-top: 10px;">
-                        ${result.risk_factors.map(factor => `<li>${factor}</li>`).join('')}
-                    </ul>
-                </div>
-            ` : ''}
-            <p style="margin-top: 15px;"><strong>⚠️ Please consult a healthcare provider for proper evaluation and testing.</strong></p>
-            <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                <em>This is a machine learning prediction. Always consult healthcare professionals for medical advice.</em>
-            </p>
-        `;
-    }
-}
-
-function displayError(errorMessage) {
-    const resultDiv = document.getElementById('result');
-    resultDiv.className = 'result error show';
-    resultDiv.innerHTML = `
-        <h3>❌ Error</h3>
-        <p>Sorry, there was an error making the prediction:</p>
-        <p><strong>${errorMessage}</strong></p>
-        <p>Please try again or contact support if the problem persists.</p>
-    `;
-}
-
-// Keep the input validation
-document.querySelectorAll('input[type="number"]').forEach(input => {
-    input.addEventListener('input', function() {
-        if (this.checkValidity()) {
-            this.style.borderColor = '#4caf50';
-        } else {
-            this.style.borderColor = '#f44336';
+        function displayError(errorMessage) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result error show';
+            resultDiv.innerHTML = `
+                <h3>❌ Error</h3>
+                <p>Sorry, there was an error making the prediction:</p>
+                <p><strong>${errorMessage}</strong></p>
+                <p>Please try again or contact support if the problem persists.</p>
+            `;
         }
-    });
-});
+
+        // Input validation with visual feedback
+        document.querySelectorAll('input[type="number"]').forEach(input => {
+            input.addEventListener('input', function() {
+                if (this.checkValidity()) {
+                    this.style.borderColor = '#4caf50';
+                } else {
+                    this.style.borderColor = '#f44336';
+                }
+            });
+        });
     </script>
 </body>
 </html>
