@@ -86,18 +86,6 @@ python app.py
 
 The application will start on `http://localhost:5000`
 
-### Production Mode
-
-```bash
-gunicorn app:app
-```
-
-Or specify host and port:
-
-```bash
-gunicorn --bind 0.0.0.0:8000 app:app
-```
-
 ## Input Parameters
 
 The application requires the following health parameters:
@@ -119,42 +107,13 @@ The application requires the following health parameters:
 - **Description**: Serves the main application interface
 - **Returns**: HTML page
 
-### POST /predict
-- **Description**: Makes diabetes risk prediction
-- **Content-Type**: application/json
-- **Request Body**:
-```json
-{
-    "pregnancies": 1,
-    "glucose": 120,
-    "bloodPressure": 80,
-    "skinThickness": 25,
-    "insulin": 100,
-    "bmi": 25.5,
-    "diabetesPedigree": 0.5,
-    "age": 30
-}
-```
-- **Response**:
-```json
-{
-    "success": true,
-    "prediction": 0,
-    "confidence": 0.85,
-    "probabilities": {
-        "no_diabetes": 0.85,
-        "diabetes": 0.15
-    },
-    "risk_factors": ["⚠️ Elevated glucose level (100-125 mg/dL)"]
-}
-```
 
 ## Project Structure
 
 ```
 diabetes-risk-predictor/
 ├── app.py                 # Main Flask application
-├── Procfile              # Heroku deployment configuration
+├── Procfile              # render or heroku
 ├── requirement.txt       # Python dependencies
 ├── diabetes_model.pkl    # Trained ML model (add this)
 ├── scaler.pkl           # Feature scaler (add this)
@@ -164,23 +123,6 @@ diabetes-risk-predictor/
 ```
 
 
-```
-
-## Deployment
-
-
-### Docker Deployment
-
-Create a `Dockerfile`:
-```dockerfile
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirement.txt .
-RUN pip install -r requirement.txt
-COPY . .
-EXPOSE 8000
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
-```
 
 ## Risk Factor Analysis
 
